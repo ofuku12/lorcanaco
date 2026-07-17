@@ -58,7 +58,7 @@ function loadSave(){
     }catch(e){}
   }
   return {};
-}}
+}
 function persist(){
   const o={};
   cards.forEach(c=>o[c.id]={owned:Number(c.owned)||0,price:Number(c.price)||0});
