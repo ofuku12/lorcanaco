@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>ロルカナ 高レアリティバインダー</title>
+<title>ロルカナ 高レアリティバインダー（保存修正版）</title>
 <style>
 :root{--bg:#080b16;--bg2:#17112a;--panel:#141a2e;--line:#2b3452;--text:#f6f7fc;--muted:#aab2d3;--gold:#f4c84b;--green:#77d970;--sidebar:210px;--head:150px}
 *{box-sizing:border-box}html{scroll-behavior:smooth}
@@ -28,7 +28,7 @@ main{margin-left:var(--sidebar);padding:calc(var(--head) + 20px) 18px 70px;trans
 </style>
 </head>
 <body>
-<header id="header"><h1>ロルカナ 高レアリティバインダー</h1><div class="toolbar">
+<header id="header"><h1>ロルカナ 高レアリティバインダー <small style="font-size:11px;color:#77d970">保存修正版</small></h1><div class="toolbar">
 <button class="btn mobile-set" id="mobileSet">弾を選ぶ</button>
 <button class="btn active own-filter" data-own="all">全部</button><button class="btn own-filter" data-own="owned">所持のみ</button><button class="btn own-filter" data-own="missing">未所持のみ</button>
 <button class="btn active rarity-filter" data-rarity="all">全種類</button><button class="btn rarity-filter" data-rarity="エンチャンテッド">エンチャンテッド</button><button class="btn rarity-filter" data-rarity="アイコニック">アイコニック</button><button class="btn rarity-filter" data-rarity="プロモ">プロモ</button>
@@ -47,27 +47,52 @@ let cards=[],setNames={},state={set:'all',own:'all',rarity:'all',sort:'set',q:''
 const $=id=>document.getElementById(id),grid=$('grid'),sidebar=$('sidebar'),header=$('header');
 function esc(s){return String(s||'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]))}
 function loadSave(){
-  const keys=[KEY,'lorcana_collection_light_v1','lorcana_collection_save','lorcana_collection'];
-  for(const key of keys){
+  const preferredKeys=[
+    KEY,
+    'lorcana_collection_light_v1',
+    'lorcana_collection_save',
+    'lorcana_collection',
+    'lorcana_high_rarity_v4',
+    'lorcana_high_rarity_v3',
+    'lorcana_high_rarity_v2',
+    'lorcana_collection_site_v1'
+  ];
+  for(const key of preferredKeys){
     try{
       const raw=localStorage.getItem(key);
-      if(raw){
-        const parsed=JSON.parse(raw);
-        if(parsed && typeof parsed==='object') return parsed;
-      }
+      if(!raw) continue;
+      const parsed=JSON.parse(raw);
+      if(parsed && typeof parsed==='object') return parsed;
     }catch(e){}
   }
   return {};
 }
+function clearLegacyStorage(){
+  try{
+    const remove=[];
+    for(let i=0;i<localStorage.length;i++){
+      const key=localStorage.key(i);
+      if(key && key!==KEY && key.toLowerCase().includes('lorcana')) remove.push(key);
+    }
+    remove.forEach(key=>localStorage.removeItem(key));
+  }catch(e){}
+}
 function persist(){
   const o={};
   cards.forEach(c=>o[c.id]={owned:Number(c.owned)||0,price:Number(c.price)||0});
+  const json=JSON.stringify(o);
   try{
-    localStorage.setItem(KEY,JSON.stringify(o));
+    localStorage.setItem(KEY,json);
     return true;
   }catch(e){
-    alert('ブラウザへの保存に失敗しました。プライベートモードやサイトデータのブロックを確認してください。');
-    return false;
+    clearLegacyStorage();
+    try{
+      localStorage.setItem(KEY,json);
+      return true;
+    }catch(e2){
+      $('stats').textContent='保存できません（ブラウザのサイトデータ設定を確認）';
+      return false;
+    }
   }
 }
 function applySave(o){cards=cards.map(c=>o[c.id]?{...c,owned:Number(o[c.id].owned)||0,price:Number(o[c.id].price)||0}:c)}
@@ -115,7 +140,10 @@ function init(){
   try{
     cards=JSON.parse(JSON.stringify(EMBEDDED_DATA.cards));
     setNames=EMBEDDED_DATA.setNames;
-    applySave(loadSave());
+    const migratedSave=loadSave();
+    applySave(migratedSave);
+    clearLegacyStorage();
+    persist();
     sets();
     render();
   }catch(e){
