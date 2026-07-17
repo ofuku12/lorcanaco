@@ -51,10 +51,41 @@ function applySave(o){cards=cards.map(c=>o[c.id]?{...c,owned:Number(o[c.id].owne
 function sets(){ $('setButtons').innerHTML=Object.entries(setNames).map(([n,name])=>`<button class="set-btn" data-set="${n}"><b>第${n}弾</b><span>${esc(name)}</span></button>`).join('');document.querySelectorAll('.set-btn').forEach(b=>b.onclick=()=>{state.set=b.dataset.set;document.querySelectorAll('.set-btn').forEach(x=>x.classList.toggle('active',x===b));render();if(innerWidth<761)sidebar.classList.remove('open')})}
 function filtered(){let a=cards.filter(c=>{if(state.set==='promo'&&c.category!=='プロモ')return false;if(!['all','promo'].includes(state.set)&&String(c.setNumber)!==state.set)return false;if(state.own==='owned'&&!(c.owned>0))return false;if(state.own==='missing'&&c.owned>0)return false;if(state.rarity!=='all'&&c.category!==state.rarity)return false;if(state.q&&!(`${c.name} ${c.setShort||''}`.toLowerCase().includes(state.q)))return false;return true});a.sort((x,y)=>state.sort==='price'?(y.price||0)-(x.price||0):state.sort==='owned'?(y.owned||0)-(x.owned||0):(Number(x.setNumber||999)-Number(y.setNumber||999)||Number(x.sortNumber||x.number||0)-Number(y.sortNumber||y.number||0)));return a}
 function render(){const a=filtered();$('empty').hidden=!!a.length;grid.innerHTML=a.map(c=>`<article class="card ${c.owned>0?'owned':''}" data-id="${encodeURIComponent(c.id)}"><div class="set-banner ${c.category==='プロモ'?'promo':''}"><span>${c.category==='プロモ'?'プロモ':`第${c.setNumber}弾`}</span><small>${esc(c.category==='プロモ'?'PROMO CARD':c.setShort||'')}</small></div><div class="badges"><span class="badge ${c.category==='アイコニック'?'iconic':''}">${esc(c.category)}</span>${c.owned>0?`<span class="badge owned-count">${c.owned}枚</span>`:''}</div>${c.image?`<img loading="lazy" src="${esc(c.image)}" alt="${esc(c.name)}">`:`<div class="placeholder">画像未設定</div>`}<div class="name">${esc(c.name)}</div><div class="meta">${c.category==='プロモ'?'プロモカード':`第${c.setNumber}弾 / No.${esc(c.number)}`}</div><div class="fields"><div class="field"><label>価格</label><input type="number" min="0" data-k="price" value="${c.price||0}"></div><div class="field"><label>枚数</label><input type="number" min="0" data-k="owned" value="${c.owned||0}"></div></div></article>`).join('');
-grid.querySelectorAll('input').forEach(i=>i.onchange=e=>{const c=cards.find(x=>x.id===decodeURIComponent(e.target.closest('.card').dataset.id));c[e.target.dataset.k]=Math.max(0,Number(e.target.value)||0);persist();render()});
+grid.querySelectorAll('input').forEach(i=>{
+  const saveValue=e=>{
+    const cardEl=e.target.closest('.card');
+    const c=cards.find(x=>x.id===decodeURIComponent(cardEl.dataset.id));
+    if(!c)return;
+    c[e.target.dataset.k]=Math.max(0,Number(e.target.value)||0);
+    persist();
+    updateStats();
+    cardEl.classList.toggle('owned',c.owned>0);
+    const countBadge=cardEl.querySelector('.owned-count');
+    if(c.owned>0){
+      if(countBadge) countBadge.textContent=c.owned+'枚';
+      else{
+        const badge=document.createElement('span');
+        badge.className='badge owned-count';
+        badge.textContent=c.owned+'枚';
+        cardEl.querySelector('.badges').appendChild(badge);
+      }
+    }else if(countBadge){
+      countBadge.remove();
+    }
+  };
+  i.addEventListener('input',saveValue);
+  i.addEventListener('change',saveValue);
+});
 grid.querySelectorAll('img').forEach(img=>img.onclick=()=>{$('modalImage').src=img.src;$('imageModal').classList.add('open')});
-const own=cards.filter(c=>c.owned>0).length,count=cards.reduce((s,c)=>s+(c.owned||0),0),total=cards.reduce((s,c)=>s+(c.price||0)*(c.owned||0),0),pct=cards.length?Math.round(own/cards.length*100):0;$('stats').textContent=`所持 ${own}/${cards.length}種（${pct}%）・${count}枚・${total.toLocaleString()}円`;
+updateStats();
 $('resultTitle').textContent=state.set==='all'?`全カード：${a.length}種`:state.set==='promo'?`プロモカード：${a.length}種`:`第${state.set}弾 ${setNames[state.set]}：${a.length}種`}
+function updateStats(){
+ const own=cards.filter(c=>c.owned>0).length;
+ const count=cards.reduce((s,c)=>s+(c.owned||0),0);
+ const total=cards.reduce((s,c)=>s+(c.price||0)*(c.owned||0),0);
+ const pct=cards.length?Math.round(own/cards.length*100):0;
+ $('stats').textContent=`所持 ${own}/${cards.length}種（${pct}%）・${count}枚・${total.toLocaleString()}円`;
+}
 async function init(){try{const r=await fetch('cards.json',{cache:'no-store'});if(!r.ok)throw new Error('cards.jsonを読み込めません');const data=await r.json();cards=data.cards;setNames=data.setNames;applySave(loadSave());sets();render()}catch(e){grid.innerHTML=`<div class="empty">読み込みエラー：${esc(e.message)}<br>GitHub Pages上で開くか、ローカルサーバーを使ってください。</div>`}}
 document.querySelectorAll('.own-filter').forEach(b=>b.onclick=()=>{state.own=b.dataset.own;document.querySelectorAll('.own-filter').forEach(x=>x.classList.toggle('active',x===b));render()});
 document.querySelectorAll('.rarity-filter').forEach(b=>b.onclick=()=>{state.rarity=b.dataset.rarity;document.querySelectorAll('.rarity-filter').forEach(x=>x.classList.toggle('active',x===b));render()});
@@ -62,5 +93,5 @@ $('sort').onchange=e=>{state.sort=e.target.value;render()};$('search').oninput=e
 $('exportBtn').onclick=()=>{persist();const blob=new Blob([localStorage.getItem(KEY)||'{}'],{type:'application/json'}),a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='lorcana_collection_save.json';a.click();URL.revokeObjectURL(a.href)};
 $('importBtn').onclick=()=>$('fileInput').click();$('fileInput').onchange=async e=>{try{const o=JSON.parse(await e.target.files[0].text());applySave(o);persist();render()}catch{alert('保存データを読み込めませんでした')}e.target.value=''};
 $('modalClose').onclick=()=>$('imageModal').classList.remove('open');$('imageModal').onclick=e=>{if(e.target===$('imageModal'))$('imageModal').classList.remove('open')};
-let last=scrollY;addEventListener('scroll',()=>{const y=scrollY;if(y>100&&y>last+3)header.classList.add('hide');else if(y<last-3||y<30)header.classList.remove('hide');last=y},{passive:true});init();
+addEventListener('pagehide',persist);addEventListener('beforeunload',persist);let last=scrollY;addEventListener('scroll',()=>{const y=scrollY;if(y>100&&y>last+3)header.classList.add('hide');else if(y<last-3||y<30)header.classList.remove('hide');last=y},{passive:true});init();
 </script></body></html>
